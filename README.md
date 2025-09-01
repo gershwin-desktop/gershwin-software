@@ -9,7 +9,7 @@ sudo pkg install -g 'GhostBSD*-dev'
 sudo pkg install gershwin-developer
 ```
 
-(Gershwin authentication)[git@github.com:gershwin-desktop/gershwin-authentication.git] must also be installed for this to work
+[Gershwin authentication](https://github.com/gershwin-desktop/gershwin-authentication) must also be installed for this to work
 
 ### Features
 
