@@ -437,9 +437,9 @@
     }
     
     [self runCommand:gsauthPath
-       withArguments:@[@"Software Manager", 
-                      [NSString stringWithFormat:@"install %@", appName],
-                      @"--exec", @"/bin/sh", scriptPath]
+       withArguments:@[@"--exec", @"/bin/sh", scriptPath,
+                      @"Software Manager",
+                      [NSString stringWithFormat:@"install %@", appName]]
          inDirectory:appPath
         requiresAuth:NO];
 }
@@ -494,9 +494,9 @@
     // Note: The gsauth dialog will serve as confirmation
     // The action text "remove AppName" makes it clear what will happen
     [self runCommand:gsauthPath
-       withArguments:@[@"Software Manager", 
-                      [NSString stringWithFormat:@"remove %@", appName],
-                      @"--exec", @"/bin/sh", scriptPath]
+       withArguments:@[@"--exec", @"/bin/sh", scriptPath,
+                      @"Software Manager",
+                      [NSString stringWithFormat:@"remove %@", appName]]
          inDirectory:NSHomeDirectory()
         requiresAuth:NO];
 }
