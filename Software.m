@@ -302,15 +302,9 @@
     
     NSTableColumn *nameColumn = [[NSTableColumn alloc] initWithIdentifier:@"name"];
     [[nameColumn headerCell] setStringValue:@"Application"];
-    [nameColumn setWidth:200];
+    [nameColumn setWidth:250];
     [applicationTableView addTableColumn:nameColumn];
     [nameColumn release];
-    
-    NSTableColumn *versionColumn = [[NSTableColumn alloc] initWithIdentifier:@"version"];
-    [[versionColumn headerCell] setStringValue:@"Version"];
-    [versionColumn setWidth:100];
-    [applicationTableView addTableColumn:versionColumn];
-    [versionColumn release];
     
     NSTableColumn *statusColumn = [[NSTableColumn alloc] initWithIdentifier:@"status"];
     [[statusColumn headerCell] setStringValue:@"Status"];
@@ -320,7 +314,7 @@
     
     NSTableColumn *pathColumn = [[NSTableColumn alloc] initWithIdentifier:@"path"];
     [[pathColumn headerCell] setStringValue:@"Repository"];
-    [pathColumn setWidth:300];
+    [pathColumn setWidth:350];
     [applicationTableView addTableColumn:pathColumn];
     [pathColumn release];
     
