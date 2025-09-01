@@ -1,36 +1,31 @@
-# Gershwin App Template
+# Gershwin Software
 
-This github template aims to help developers get a head start with their environment setup
+Software management tool focused on GNUstep applications
 
 Prerequisites
 
-- Gershwin installation
-- clang
+```
+sudo pkg install -g 'GhostBSD*-dev'
+sudo pkg install gershwin-developer
+```
 
+(Gershwin authentication)[git@github.com:gershwin-desktop/gershwin-authentication.git] must also be installed for this to work
 
 ### Features
 
-- Related files to help your editor's intellisense
-- Files to help with formatting. They include this project's code style settings so please use them
-- Settings file for VSCode
-- Basic hello world application that will build
-
-If you use neovim or some other IDE/editor, please check out the dev-config repo
-
+- Automates build and installation of highly integrated GNUstep wrappers (does require the specific apps to be installed by pkg for now)
+- Automates build and installation of GNUstep applications that work well on Gershwin
 
 ## Build Instructions
+
+Note it is not recommended to install at this time since this will replace Software Station.  This will be packaged to replace Software Station in a future release.
 
 ### Build
 ```bash
 gmake
 ```
 
-### Install
-```bash
-sudo gmake install 
-```
-
 ### Run
 ```bash
-openapp HelloWorld
+openapp ./Software.app
 ```
