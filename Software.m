@@ -345,7 +345,14 @@
         }
     }
     
-    [info setObject:appPath forKey:@"path"];
+    // Store the full path for internal use (building, installing, etc.)
+    [info setObject:appPath forKey:@"fullPath"];
+    
+    // Extract the repository name from the path
+    // The repo is the parent directory of the application folder
+    NSString *parentPath = [appPath stringByDeletingLastPathComponent];
+    NSString *repoName = [parentPath lastPathComponent];
+    [info setObject:repoName forKey:@"path"];
     
     NSString *appName = [info objectForKey:@"name"];
     if (appName) {
@@ -373,7 +380,7 @@
     }
     
     NSDictionary *app = [applications objectAtIndex:selectedRow];
-    NSString *appPath = [app objectForKey:@"path"];
+    NSString *appPath = [app objectForKey:@"fullPath"];  // Changed from "path" to "fullPath"
     NSString *appName = [app objectForKey:@"name"];
     
     [self appendToLog:[NSString stringWithFormat:@"\n=== Building %@ ===\n", appName]];
@@ -395,7 +402,7 @@
     }
     
     NSDictionary *app = [applications objectAtIndex:selectedRow];
-    NSString *appPath = [app objectForKey:@"path"];
+    NSString *appPath = [app objectForKey:@"fullPath"];  // Changed from "path" to "fullPath"
     NSString *appName = [app objectForKey:@"name"];
     NSString *status = [app objectForKey:@"status"];
     
