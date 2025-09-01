@@ -114,7 +114,7 @@
     [statusColumn release];
     
     NSTableColumn *pathColumn = [[NSTableColumn alloc] initWithIdentifier:@"path"];
-    [[pathColumn headerCell] setStringValue:@"Path"];
+    [[pathColumn headerCell] setStringValue:@"Repository"];
     [pathColumn setWidth:300];
     [applicationTableView addTableColumn:pathColumn];
     [pathColumn release];
