@@ -15,11 +15,10 @@
         isInstalling = NO;
         
         // Use NSSearchPathForDirectoriesInDomains to respect GNUstep.conf settings
-        // This will be ~/Library on Gershwin or ~/GNUstep/Library on traditional GNUstep
         NSArray *libraryPaths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
         NSString *userLibraryDir = [libraryPaths objectAtIndex:0];
         
-        // Set the repo path in user Library directory ONLY (no fallbacks)
+        // Set the repo path in user Library directory
         repoPath = [[userLibraryDir stringByAppendingPathComponent:@"gershwin-universe-wrappers"] retain];
     }
     return self;
@@ -197,7 +196,6 @@
     [logTextView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
     [logTextView setEditable:NO];
     [logTextView setRichText:YES];
-    // Use monospace system font instead of hardcoded font
     [logTextView setFont:[NSFont userFixedPitchFontOfSize:11.0]];
     [logTextView setBackgroundColor:[NSColor blackColor]];
     [logTextView setTextColor:[NSColor greenColor]];
@@ -235,16 +233,13 @@
                 withColor:[NSColor yellowColor]];
         [self updateStatus:@"Cloning repository..."];
         
-        // Try to clone the repository
         NSString *parentDir = [repoPath stringByDeletingLastPathComponent];
         
-        // Create parent directory if needed
         [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
                                   withIntermediateDirectories:YES
                                                    attributes:nil
                                                         error:nil];
         
-        // Clone the repository
         NSTask *gitTask = [[NSTask alloc] init];
         [gitTask setLaunchPath:@"git"];
         [gitTask setArguments:@[@"clone", 
@@ -302,7 +297,6 @@
         BOOL isDir;
         
         if ([fm fileExistsAtPath:fullPath isDirectory:&isDir] && isDir) {
-            // Check if this directory contains a GNUmakefile
             NSString *makefilePath = [fullPath stringByAppendingPathComponent:@"GNUmakefile"];
             NSString *preamblePath = [fullPath stringByAppendingPathComponent:@"GNUmakefile.preamble"];
             
@@ -332,7 +326,6 @@
         return nil;
     }
     
-    // Parse the preamble file
     NSArray *lines = [content componentsSeparatedByString:@"\n"];
     for (NSString *line in lines) {
         NSArray *parts = [line componentsSeparatedByString:@"="];
@@ -354,14 +347,12 @@
     
     [info setObject:appPath forKey:@"path"];
     
-    // Check if already installed
     NSString *appName = [info objectForKey:@"name"];
     if (appName) {
         NSString *installedPath = [NSString stringWithFormat:@"/Applications/%@.app", appName];
         if ([[NSFileManager defaultManager] fileExistsAtPath:installedPath]) {
             [info setObject:@"Installed" forKey:@"status"];
         } else {
-            // Check if built
             NSString *builtPath = [appPath stringByAppendingPathComponent:
                                  [NSString stringWithFormat:@"%@.app", appName]];
             if ([[NSFileManager defaultManager] fileExistsAtPath:builtPath]) {
@@ -424,7 +415,6 @@
     isInstalling = YES;
     [self setUIEnabled:NO];
     
-    // Create authorization script
     NSString *scriptPath = @"/tmp/install_app.sh";
     NSString *scriptContent = [NSString stringWithFormat:
         @"#!/bin/sh\n"
@@ -438,10 +428,28 @@
     
     chmod([scriptPath UTF8String], 0755);
     
-    [self runCommand:@"/usr/local/bin/sudo" 
-       withArguments:@[@"-S", @"/bin/sh", scriptPath] 
+    NSString *gsauthPath = [self findGSAuthPath];
+    if (!gsauthPath) {
+        [self appendToLog:@"ERROR: gsauth not found!\n" withColor:[NSColor redColor]];
+        [self updateStatus:@"gsauth not found"];
+        [self setUIEnabled:YES];
+        isInstalling = NO;
+        
+        NSAlert *alert = [[NSAlert alloc] init];
+        [alert setMessageText:@"gsauth Not Found"];
+        [alert setInformativeText:@"The gsauth authentication tool is required but not installed."];
+        [alert addButtonWithTitle:@"OK"];
+        [alert runModal];
+        [alert release];
+        return;
+    }
+    
+    [self runCommand:gsauthPath
+       withArguments:@[@"Software Manager", 
+                      [NSString stringWithFormat:@"install %@", appName],
+                      @"--exec", @"/bin/sh", scriptPath]
          inDirectory:appPath
-        requiresAuth:YES];
+        requiresAuth:NO];
 }
 
 - (void)removeApplication:(id)sender
@@ -464,7 +472,6 @@
         return;
     }
     
-    // Confirm removal
     NSAlert *confirmAlert = [[NSAlert alloc] init];
     [confirmAlert setMessageText:[NSString stringWithFormat:@"Remove %@?", appName]];
     [confirmAlert setInformativeText:[NSString stringWithFormat:@"Are you sure you want to remove %@ from /Applications?", appName]];
@@ -480,10 +487,9 @@
     [self appendToLog:[NSString stringWithFormat:@"\n=== Removing %@ ===\n", appName]];
     [self updateStatus:[NSString stringWithFormat:@"Removing %@...", appName]];
     
-    isInstalling = YES;  // Reuse the flag for removal
+    isInstalling = YES;
     [self setUIEnabled:NO];
     
-    // Create removal script
     NSString *scriptPath = @"/tmp/remove_app.sh";
     NSString *scriptContent = [NSString stringWithFormat:
         @"#!/bin/sh\n"
@@ -497,15 +503,79 @@
     
     chmod([scriptPath UTF8String], 0755);
     
-    [self runCommand:@"/usr/local/bin/sudo" 
-       withArguments:@[@"-S", @"/bin/sh", scriptPath] 
+    NSString *gsauthPath = [self findGSAuthPath];
+    if (!gsauthPath) {
+        [self appendToLog:@"ERROR: gsauth not found!\n" withColor:[NSColor redColor]];
+        [self updateStatus:@"gsauth not found"];
+        [self setUIEnabled:YES];
+        isInstalling = NO;
+        
+        NSAlert *alert = [[NSAlert alloc] init];
+        [alert setMessageText:@"gsauth Not Found"];
+        [alert setInformativeText:@"The gsauth authentication tool is required but not installed."];
+        [alert addButtonWithTitle:@"OK"];
+        [alert runModal];
+        [alert release];
+        return;
+    }
+    
+    [self runCommand:gsauthPath
+       withArguments:@[@"Software Manager", 
+                      [NSString stringWithFormat:@"remove %@", appName],
+                      @"--exec", @"/bin/sh", scriptPath]
          inDirectory:NSHomeDirectory()
-        requiresAuth:YES];
+        requiresAuth:NO];
 }
 
 - (void)refreshList:(id)sender
 {
     [self refreshApplicationList];
+}
+
+- (NSString *)findGSAuthPath
+{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray *searchPaths = @[
+        @"/usr/local/bin/gsauth",
+        @"/opt/local/bin/gsauth",
+        @"/usr/bin/gsauth"
+    ];
+    
+    for (NSString *path in searchPaths) {
+        if ([fm fileExistsAtPath:path]) {
+            return path;
+        }
+    }
+    
+    NSTask *configTask = [[NSTask alloc] init];
+    [configTask setLaunchPath:@"gnustep-config"];
+    [configTask setArguments:@[@"--variable=GNUSTEP_SYSTEM_TOOLS"]];
+    
+    NSPipe *pipe = [NSPipe pipe];
+    [configTask setStandardOutput:pipe];
+    
+    @try {
+        [configTask launch];
+        [configTask waitUntilExit];
+        
+        if ([configTask terminationStatus] == 0) {
+            NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
+            NSString *toolsPath = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            toolsPath = [toolsPath stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
+            NSString *possiblePath = [toolsPath stringByAppendingPathComponent:@"gsauth"];
+            if ([fm fileExistsAtPath:possiblePath]) {
+                [toolsPath autorelease];
+                [configTask release];
+                return possiblePath;
+            }
+            [toolsPath release];
+        }
+    }
+    @catch (NSException *exception) {}
+    
+    [configTask release];
+    return nil;
 }
 
 - (void)runCommand:(NSString *)command 
@@ -523,91 +593,9 @@
     [currentTask setArguments:arguments];
     [currentTask setCurrentDirectoryPath:directory];
     
-    // Set up pipes for output
     outputPipe = [[NSPipe alloc] init];
     [currentTask setStandardOutput:outputPipe];
     [currentTask setStandardError:outputPipe];
-    
-    if (requiresAuth) {
-        // For sudo, we need to handle password input
-        NSPipe *inputPipe = [NSPipe pipe];
-        [currentTask setStandardInput:inputPipe];
-        
-        // Prompt for password
-        NSAlert *alert = [[NSAlert alloc] init];
-        [alert setMessageText:@"Administrator Password Required"];
-        [alert setInformativeText:@"Please enter your password to install the application:"];
-        
-        NSSecureTextField *passwordField = [[NSSecureTextField alloc] initWithFrame:NSMakeRect(0, 0, 200, 24)];
-        
-        // Create a view to hold the password field since setAccessoryView might not be available
-        NSView *accessoryView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 200, 24)];
-        [accessoryView addSubview:passwordField];
-        
-        // Try to set accessory view if method is available
-        if ([alert respondsToSelector:@selector(setAccessoryView:)]) {
-            [alert setAccessoryView:accessoryView];
-        }
-        
-        [alert addButtonWithTitle:@"OK"];
-        [alert addButtonWithTitle:@"Cancel"];
-        
-        // If accessory view isn't supported, we'll need to get password differently
-        NSInteger result;
-        if (![alert respondsToSelector:@selector(setAccessoryView:)]) {
-            // Fall back to a simple password prompt
-            [passwordField release];
-            [accessoryView release];
-            [alert release];
-            
-            // Use a simple input dialog instead
-            NSString *password = [self promptForPassword];
-            if (password) {
-                // Write password to sudo
-                NSFileHandle *inputHandle = [inputPipe fileHandleForWriting];
-                NSString *passwordWithNewline = [password stringByAppendingString:@"\n"];
-                [inputHandle writeData:[passwordWithNewline dataUsingEncoding:NSUTF8StringEncoding]];
-                [inputHandle closeFile];
-            } else {
-                [self updateStatus:@"Installation cancelled"];
-                [self setUIEnabled:YES];
-                isInstalling = NO;
-                [outputPipe release];
-                outputPipe = nil;
-                [currentTask release];
-                currentTask = nil;
-                return;
-            }
-        } else {
-            result = [alert runModal];
-            
-            if (result == NSAlertFirstButtonReturn) {
-                NSString *password = [passwordField stringValue];
-                
-                // Write password to sudo
-                NSFileHandle *inputHandle = [inputPipe fileHandleForWriting];
-                NSString *passwordWithNewline = [password stringByAppendingString:@"\n"];
-                [inputHandle writeData:[passwordWithNewline dataUsingEncoding:NSUTF8StringEncoding]];
-                [inputHandle closeFile];
-            } else {
-                [self updateStatus:@"Installation cancelled"];
-                [self setUIEnabled:YES];
-                isInstalling = NO;
-                [outputPipe release];
-                outputPipe = nil;
-                [currentTask release];
-                currentTask = nil;
-                [passwordField release];
-                [accessoryView release];
-                [alert release];
-                return;
-            }
-            
-            [passwordField release];
-            [accessoryView release];
-            [alert release];
-        }
-    }
     
     NSFileHandle *outputHandle = [outputPipe fileHandleForReading];
     
@@ -668,39 +656,33 @@
             [self appendToLog:@"\nBuild completed successfully!\n" withColor:[NSColor greenColor]];
             [self updateStatus:@"Build completed"];
             
-            // Update application status
             NSMutableDictionary *app = [[applications objectAtIndex:selectedRow] mutableCopy];
             [app setObject:@"Built" forKey:@"status"];
             [applications replaceObjectAtIndex:selectedRow withObject:app];
             [app release];
             [applicationTableView reloadData];
         } else if (isInstalling) {
-            // Check if it was a removal or installation
             if ([[NSFileManager defaultManager] fileExistsAtPath:@"/tmp/remove_app.sh"]) {
                 [self appendToLog:@"\nRemoval completed successfully!\n" withColor:[NSColor greenColor]];
                 [self updateStatus:@"Removal completed"];
                 
-                // Update application status
                 NSMutableDictionary *app = [[applications objectAtIndex:selectedRow] mutableCopy];
                 [app setObject:@"Not built" forKey:@"status"];
                 [applications replaceObjectAtIndex:selectedRow withObject:app];
                 [app release];
                 [applicationTableView reloadData];
                 
-                // Clean up temp script
                 [[NSFileManager defaultManager] removeItemAtPath:@"/tmp/remove_app.sh" error:nil];
             } else {
                 [self appendToLog:@"\nInstallation completed successfully!\n" withColor:[NSColor greenColor]];
                 [self updateStatus:@"Installation completed"];
                 
-                // Update application status
                 NSMutableDictionary *app = [[applications objectAtIndex:selectedRow] mutableCopy];
                 [app setObject:@"Installed" forKey:@"status"];
                 [applications replaceObjectAtIndex:selectedRow withObject:app];
                 [app release];
                 [applicationTableView reloadData];
                 
-                // Clean up temp script
                 [[NSFileManager defaultManager] removeItemAtPath:@"/tmp/install_app.sh" error:nil];
             }
         }
@@ -709,7 +691,6 @@
             [self appendToLog:@"\nBuild failed!\n" withColor:[NSColor redColor]];
             [self updateStatus:@"Build failed"];
         } else if (isInstalling) {
-            // Check if it was a removal or installation
             if ([[NSFileManager defaultManager] fileExistsAtPath:@"/tmp/remove_app.sh"]) {
                 [self appendToLog:@"\nRemoval failed!\n" withColor:[NSColor redColor]];
                 [self updateStatus:@"Removal failed"];
@@ -805,63 +786,6 @@
     NSString *identifier = [tableColumn identifier];
     
     return [app objectForKey:identifier];
-}
-
-- (NSString *)promptForPassword
-{
-    // Simple password dialog fallback for GNUstep
-    NSPanel *panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 350, 120)
-                                                 styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable)
-                                                   backing:NSBackingStoreBuffered
-                                                     defer:YES];
-    [panel setTitle:@"Administrator Password Required"];
-    
-    NSTextField *label = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 70, 310, 20)];
-    [label setStringValue:@"Please enter your password to install:"];
-    [label setEditable:NO];
-    [label setBordered:NO];
-    [label setBackgroundColor:[NSColor clearColor]];
-    [[panel contentView] addSubview:label];
-    [label release];
-    
-    NSSecureTextField *passwordField = [[NSSecureTextField alloc] initWithFrame:NSMakeRect(20, 40, 310, 24)];
-    [[panel contentView] addSubview:passwordField];
-    
-    NSButton *okButton = [[NSButton alloc] initWithFrame:NSMakeRect(250, 10, 80, 24)];
-    [okButton setTitle:@"OK"];
-    [okButton setButtonType:NSMomentaryPushInButton];
-    [okButton setBezelStyle:NSRoundedBezelStyle];
-    [okButton setTarget:panel];
-    [okButton setAction:@selector(stopModalWithCode:)];
-    [okButton setTag:NSAlertFirstButtonReturn];
-    [[panel contentView] addSubview:okButton];
-    [okButton release];
-    
-    NSButton *cancelButton = [[NSButton alloc] initWithFrame:NSMakeRect(160, 10, 80, 24)];
-    [cancelButton setTitle:@"Cancel"];
-    [cancelButton setButtonType:NSMomentaryPushInButton];
-    [cancelButton setBezelStyle:NSRoundedBezelStyle];
-    [cancelButton setTarget:panel];
-    [cancelButton setAction:@selector(stopModalWithCode:)];
-    [cancelButton setTag:NSAlertSecondButtonReturn];
-    [[panel contentView] addSubview:cancelButton];
-    [cancelButton release];
-    
-    [panel center];
-    [panel makeKeyAndOrderFront:nil];
-    
-    NSInteger result = [NSApp runModalForWindow:panel];
-    NSString *password = nil;
-    
-    if (result == NSAlertFirstButtonReturn) {
-        password = [[passwordField stringValue] retain];
-    }
-    
-    [passwordField release];
-    [panel close];
-    [panel release];
-    
-    return [password autorelease];
 }
 
 @end

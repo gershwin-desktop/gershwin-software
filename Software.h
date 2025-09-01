@@ -58,6 +58,7 @@
     objectValueForTableColumn:(NSTableColumn *)tableColumn 
     row:(NSInteger)row;
 
-- (NSString *)promptForPassword;
+// Authentication method
+- (NSString *)findGSAuthPath;
 
 @end
