@@ -400,12 +400,9 @@
     NSString *status = [app objectForKey:@"status"];
     
     if (![status isEqualToString:@"Built"] && ![status isEqualToString:@"Installed"]) {
-        NSAlert *alert = [[NSAlert alloc] init];
-        [alert setMessageText:@"Application Not Built"];
-        [alert setInformativeText:@"Please build the application before installing."];
-        [alert addButtonWithTitle:@"OK"];
-        [alert runModal];
-        [alert release];
+        // Just log the error, no dialog
+        [self appendToLog:@"Error: Application must be built before installing.\n" withColor:[NSColor redColor]];
+        [self updateStatus:@"Build required first"];
         return;
     }
     
@@ -430,17 +427,12 @@
     
     NSString *gsauthPath = [self findGSAuthPath];
     if (!gsauthPath) {
+        // Just log the error, no dialog
         [self appendToLog:@"ERROR: gsauth not found!\n" withColor:[NSColor redColor]];
+        [self appendToLog:@"Please install gsauth to perform administrative operations.\n" withColor:[NSColor redColor]];
         [self updateStatus:@"gsauth not found"];
         [self setUIEnabled:YES];
         isInstalling = NO;
-        
-        NSAlert *alert = [[NSAlert alloc] init];
-        [alert setMessageText:@"gsauth Not Found"];
-        [alert setInformativeText:@"The gsauth authentication tool is required but not installed."];
-        [alert addButtonWithTitle:@"OK"];
-        [alert runModal];
-        [alert release];
         return;
     }
     
@@ -463,26 +455,11 @@
     NSString *status = [app objectForKey:@"status"];
     
     if (![status isEqualToString:@"Installed"]) {
-        NSAlert *alert = [[NSAlert alloc] init];
-        [alert setMessageText:@"Application Not Installed"];
-        [alert setInformativeText:@"This application is not currently installed."];
-        [alert addButtonWithTitle:@"OK"];
-        [alert runModal];
-        [alert release];
+        // Just log the error, no dialog
+        [self appendToLog:@"Error: Application is not installed.\n" withColor:[NSColor redColor]];
+        [self updateStatus:@"Not installed"];
         return;
     }
-    
-    NSAlert *confirmAlert = [[NSAlert alloc] init];
-    [confirmAlert setMessageText:[NSString stringWithFormat:@"Remove %@?", appName]];
-    [confirmAlert setInformativeText:[NSString stringWithFormat:@"Are you sure you want to remove %@ from /Applications?", appName]];
-    [confirmAlert addButtonWithTitle:@"Remove"];
-    [confirmAlert addButtonWithTitle:@"Cancel"];
-    
-    if ([confirmAlert runModal] != NSAlertFirstButtonReturn) {
-        [confirmAlert release];
-        return;
-    }
-    [confirmAlert release];
     
     [self appendToLog:[NSString stringWithFormat:@"\n=== Removing %@ ===\n", appName]];
     [self updateStatus:[NSString stringWithFormat:@"Removing %@...", appName]];
@@ -505,20 +482,17 @@
     
     NSString *gsauthPath = [self findGSAuthPath];
     if (!gsauthPath) {
+        // Just log the error, no dialog
         [self appendToLog:@"ERROR: gsauth not found!\n" withColor:[NSColor redColor]];
+        [self appendToLog:@"Please install gsauth to perform administrative operations.\n" withColor:[NSColor redColor]];
         [self updateStatus:@"gsauth not found"];
         [self setUIEnabled:YES];
         isInstalling = NO;
-        
-        NSAlert *alert = [[NSAlert alloc] init];
-        [alert setMessageText:@"gsauth Not Found"];
-        [alert setInformativeText:@"The gsauth authentication tool is required but not installed."];
-        [alert addButtonWithTitle:@"OK"];
-        [alert runModal];
-        [alert release];
         return;
     }
     
+    // Note: The gsauth dialog will serve as confirmation
+    // The action text "remove AppName" makes it clear what will happen
     [self runCommand:gsauthPath
        withArguments:@[@"Software Manager", 
                       [NSString stringWithFormat:@"remove %@", appName],
