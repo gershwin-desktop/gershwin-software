@@ -19,7 +19,8 @@
     NSTask *currentTask;
     NSPipe *outputPipe;
     
-    NSString *repoPath;
+    NSArray *repoPaths;
+    NSArray *repoURLs;
     BOOL isBuilding;
     BOOL isInstalling;
 }
@@ -58,7 +59,7 @@
     objectValueForTableColumn:(NSTableColumn *)tableColumn 
     row:(NSInteger)row;
 
-// Authentication method
 - (NSString *)findGSAuthPath;
+- (BOOL)cloneRepositoryIfNeeded:(NSString *)repoPath withURL:(NSString *)repoURL;
 
 @end

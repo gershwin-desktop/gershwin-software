@@ -17,7 +17,15 @@
         NSArray *libraryPaths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
         NSString *userLibraryDir = [libraryPaths objectAtIndex:0];
         
-        repoPath = [[userLibraryDir stringByAppendingPathComponent:@"gershwin-universe-wrappers"] retain];
+        repoPaths = [[NSArray alloc] initWithObjects:
+            [userLibraryDir stringByAppendingPathComponent:@"gershwin-universe-wrappers"],
+            [userLibraryDir stringByAppendingPathComponent:@"gershwin-universe-apps"],
+            nil];
+        
+        repoURLs = [[NSArray alloc] initWithObjects:
+            @"https://github.com/gershwin-desktop/gershwin-universe-wrappers.git",
+            @"https://github.com/gershwin-desktop/gershwin-universe-apps.git",
+            nil];
     }
     return self;
 }
@@ -25,7 +33,8 @@
 - (void)dealloc
 {
     [applications release];
-    [repoPath release];
+    [repoPaths release];
+    [repoURLs release];
     [currentTask release];
     [outputPipe release];
     [super dealloc];
@@ -113,8 +122,8 @@
                        action:@selector(refreshList:)
                 keyEquivalent:@"r"];
     
-    [submenu addItemWithTitle:@"Update Repository"
-                       action:@selector(updateRepository:)
+    [submenu addItemWithTitle:@"Update Repositories"
+                       action:@selector(updateRepositories:)
                 keyEquivalent:@"u"];
     
     [submenu addItemWithTitle:@"Close Window"
@@ -197,22 +206,62 @@
     [self appendToLog:@"Preferences window not yet implemented.\n" withColor:[NSColor yellowColor]];
 }
 
-- (void)updateRepository:(id)sender
+- (void)updateRepositories:(id)sender
 {
-    if (![[NSFileManager defaultManager] fileExistsAtPath:repoPath]) {
-        [self appendToLog:@"Repository not found. Please refresh the application list first.\n" 
-                withColor:[NSColor redColor]];
-        return;
-    }
-    
-    [self appendToLog:@"\n=== Updating Repository ===\n"];
-    [self updateStatus:@"Updating repository..."];
+    [self appendToLog:@"\n=== Updating All Repositories ===\n"];
+    [self updateStatus:@"Updating repositories..."];
     [self setUIEnabled:NO];
     
-    [self runCommand:@"git"
-       withArguments:@[@"pull", @"origin", @"main"]
-         inDirectory:repoPath
-        requiresAuth:NO];
+    NSUInteger repoIndex;
+    for (repoIndex = 0; repoIndex < [repoPaths count]; repoIndex++) {
+        NSString *repoPath = [repoPaths objectAtIndex:repoIndex];
+        NSString *repoName = [repoPath lastPathComponent];
+        
+        if (![[NSFileManager defaultManager] fileExistsAtPath:repoPath]) {
+            [self appendToLog:[NSString stringWithFormat:@"Repository %@ not found locally.\n", repoName] 
+                    withColor:[NSColor yellowColor]];
+            continue;
+        }
+        
+        [self appendToLog:[NSString stringWithFormat:@"Updating %@...\n", repoName]];
+        
+        NSTask *gitTask = [[NSTask alloc] init];
+        [gitTask setLaunchPath:@"git"];
+        [gitTask setArguments:@[@"pull", @"origin", @"main"]];
+        [gitTask setCurrentDirectoryPath:repoPath];
+        
+        NSPipe *pipe = [NSPipe pipe];
+        [gitTask setStandardOutput:pipe];
+        [gitTask setStandardError:pipe];
+        
+        @try {
+            [gitTask launch];
+            [gitTask waitUntilExit];
+            
+            NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
+            NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            
+            if ([gitTask terminationStatus] == 0) {
+                [self appendToLog:[NSString stringWithFormat:@"%@ updated successfully!\n", repoName] 
+                        withColor:[NSColor greenColor]];
+            } else {
+                [self appendToLog:[NSString stringWithFormat:@"Failed to update %@: %@\n", repoName, output] 
+                        withColor:[NSColor redColor]];
+            }
+            [output release];
+        }
+        @catch (NSException *exception) {
+            [self appendToLog:[NSString stringWithFormat:@"Error updating %@: %@\n", repoName, [exception reason]] 
+                    withColor:[NSColor redColor]];
+        }
+        
+        [gitTask release];
+    }
+    
+    [self appendToLog:@"Repository update completed.\n" withColor:[NSColor greenColor]];
+    [self updateStatus:@"Repositories updated"];
+    [self setUIEnabled:YES];
+    [self refreshApplicationList];
 }
 
 - (void)clearLog:(id)sender
@@ -378,63 +427,74 @@
     [self updateStatus:[NSString stringWithFormat:@"Found %lu applications", [applications count]]];
 }
 
-- (void)scanForApplications
+- (BOOL)cloneRepositoryIfNeeded:(NSString *)repoPath withURL:(NSString *)repoURL
 {
-    if (![[NSFileManager defaultManager] fileExistsAtPath:repoPath]) {
-        [self appendToLog:@"Repository not found locally. Attempting to clone...\n" 
-                withColor:[NSColor yellowColor]];
-        [self updateStatus:@"Cloning repository..."];
-        
-        NSString *parentDir = [repoPath stringByDeletingLastPathComponent];
-        
-        [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
-                                  withIntermediateDirectories:YES
-                                                   attributes:nil
-                                                        error:nil];
-        
-        NSTask *gitTask = [[NSTask alloc] init];
-        [gitTask setLaunchPath:@"git"];
-        [gitTask setArguments:@[@"clone", 
-                               @"https://github.com/gershwin-desktop/gershwin-universe-wrappers.git",
-                               repoPath]];
-        [gitTask setCurrentDirectoryPath:parentDir];
-        
-        NSPipe *pipe = [NSPipe pipe];
-        [gitTask setStandardOutput:pipe];
-        [gitTask setStandardError:pipe];
-        
-        @try {
-            [gitTask launch];
-            [gitTask waitUntilExit];
-            
-            if ([gitTask terminationStatus] == 0) {
-                [self appendToLog:@"Repository cloned successfully!\n" 
-                        withColor:[NSColor greenColor]];
-                [self updateStatus:@"Repository ready"];
-            } else {
-                NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
-                NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-                [self appendToLog:[NSString stringWithFormat:@"Failed to clone repository:\n%@\n", output] 
-                        withColor:[NSColor redColor]];
-                [output release];
-                [self updateStatus:@"Failed to clone repository"];
-                [gitTask release];
-                return;
-            }
-        }
-        @catch (NSException *exception) {
-            [self appendToLog:[NSString stringWithFormat:@"Error cloning repository: %@\n", [exception reason]] 
-                    withColor:[NSColor redColor]];
-            [self updateStatus:@"Clone failed - is git installed?"];
-            [gitTask release];
-            return;
-        }
-        
-        [gitTask release];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:repoPath]) {
+        return YES;
     }
     
-    NSArray *foundApps = [self findApplicationsInDirectory:repoPath];
-    [applications addObjectsFromArray:foundApps];
+    NSString *repoName = [repoPath lastPathComponent];
+    [self appendToLog:[NSString stringWithFormat:@"Repository %@ not found locally. Attempting to clone...\n", repoName] 
+            withColor:[NSColor yellowColor]];
+    [self updateStatus:[NSString stringWithFormat:@"Cloning %@...", repoName]];
+    
+    NSString *parentDir = [repoPath stringByDeletingLastPathComponent];
+    
+    [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+    
+    NSTask *gitTask = [[NSTask alloc] init];
+    [gitTask setLaunchPath:@"git"];
+    [gitTask setArguments:@[@"clone", repoURL, repoPath]];
+    [gitTask setCurrentDirectoryPath:parentDir];
+    
+    NSPipe *pipe = [NSPipe pipe];
+    [gitTask setStandardOutput:pipe];
+    [gitTask setStandardError:pipe];
+    
+    @try {
+        [gitTask launch];
+        [gitTask waitUntilExit];
+        
+        if ([gitTask terminationStatus] == 0) {
+            [self appendToLog:[NSString stringWithFormat:@"Repository %@ cloned successfully!\n", repoName] 
+                    withColor:[NSColor greenColor]];
+            [self updateStatus:[NSString stringWithFormat:@"%@ ready", repoName]];
+            [gitTask release];
+            return YES;
+        } else {
+            NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
+            NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            [self appendToLog:[NSString stringWithFormat:@"Failed to clone %@:\n%@\n", repoName, output] 
+                    withColor:[NSColor redColor]];
+            [output release];
+            [self updateStatus:[NSString stringWithFormat:@"Failed to clone %@", repoName]];
+        }
+    }
+    @catch (NSException *exception) {
+        [self appendToLog:[NSString stringWithFormat:@"Error cloning %@: %@\n", repoName, [exception reason]] 
+                withColor:[NSColor redColor]];
+        [self updateStatus:@"Clone failed - is git installed?"];
+    }
+    
+    [gitTask release];
+    return NO;
+}
+
+- (void)scanForApplications
+{
+    NSUInteger repoIndex;
+    for (repoIndex = 0; repoIndex < [repoPaths count]; repoIndex++) {
+        NSString *repoPath = [repoPaths objectAtIndex:repoIndex];
+        NSString *repoURL = [repoURLs objectAtIndex:repoIndex];
+        
+        if ([self cloneRepositoryIfNeeded:repoPath withURL:repoURL]) {
+            NSArray *foundApps = [self findApplicationsInDirectory:repoPath];
+            [applications addObjectsFromArray:foundApps];
+        }
+    }
 }
 
 - (NSArray *)findApplicationsInDirectory:(NSString *)directory
@@ -443,6 +503,7 @@
     NSFileManager *fm = [NSFileManager defaultManager];
     NSDirectoryEnumerator *enumerator = [fm enumeratorAtPath:directory];
     NSString *path;
+    NSString *repoName = [directory lastPathComponent];
     
     while ((path = [enumerator nextObject])) {
         NSString *fullPath = [directory stringByAppendingPathComponent:path];
@@ -452,7 +513,10 @@
             NSString *makefilePath = [fullPath stringByAppendingPathComponent:@"GNUmakefile"];
             NSString *preamblePath = [fullPath stringByAppendingPathComponent:@"GNUmakefile.preamble"];
             
-            if ([fm fileExistsAtPath:makefilePath] && [fm fileExistsAtPath:preamblePath]) {
+            BOOL hasMakefile = [fm fileExistsAtPath:makefilePath];
+            BOOL hasPreamble = [fm fileExistsAtPath:preamblePath];
+            
+            if (hasMakefile && (hasPreamble || [repoName isEqualToString:@"gershwin-universe-apps"])) {
                 NSDictionary *appInfo = [self parseApplicationInfo:fullPath];
                 if (appInfo) {
                     [foundApps addObject:appInfo];
@@ -469,53 +533,80 @@
 {
     NSMutableDictionary *info = [NSMutableDictionary dictionary];
     NSString *preamblePath = [appPath stringByAppendingPathComponent:@"GNUmakefile.preamble"];
-    
-    NSError *error;
-    NSString *content = [NSString stringWithContentsOfFile:preamblePath 
-                                                  encoding:NSUTF8StringEncoding 
-                                                     error:&error];
-    if (!content) {
-        return nil;
-    }
-    
-    NSArray *lines = [content componentsSeparatedByString:@"\n"];
-    for (NSString *line in lines) {
-        NSArray *parts = [line componentsSeparatedByString:@"="];
-        if ([parts count] == 2) {
-            NSString *key = [[parts objectAtIndex:0] stringByTrimmingCharactersInSet:
-                           [NSCharacterSet whitespaceCharacterSet]];
-            NSString *value = [[parts objectAtIndex:1] stringByTrimmingCharactersInSet:
-                             [NSCharacterSet whitespaceCharacterSet]];
-            
-            if ([key isEqualToString:@"APP_NAME"]) {
-                [info setObject:value forKey:@"name"];
-            } else if ([key isEqualToString:@"VERSION"]) {
-                [info setObject:value forKey:@"version"];
-            } else if ([key isEqualToString:@"EXECUTABLE_PATH"]) {
-                [info setObject:value forKey:@"executable"];
-            }
-        }
-    }
-    
-    [info setObject:appPath forKey:@"fullPath"];
+    NSString *makefilePath = [appPath stringByAppendingPathComponent:@"GNUmakefile"];
     
     NSString *parentPath = [appPath stringByDeletingLastPathComponent];
     NSString *repoName = [parentPath lastPathComponent];
     [info setObject:repoName forKey:@"path"];
     
-    NSString *appName = [info objectForKey:@"name"];
-    if (appName) {
-        NSString *installedPath = [NSString stringWithFormat:@"/Applications/%@.app", appName];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:installedPath]) {
-            [info setObject:@"Installed" forKey:@"status"];
-        } else {
-            NSString *builtPath = [appPath stringByAppendingPathComponent:
-                                 [NSString stringWithFormat:@"%@.app", appName]];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:builtPath]) {
-                [info setObject:@"Built" forKey:@"status"];
-            } else {
-                [info setObject:@"Not built" forKey:@"status"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:preamblePath]) {
+        NSError *error;
+        NSString *content = [NSString stringWithContentsOfFile:preamblePath 
+                                                      encoding:NSUTF8StringEncoding 
+                                                         error:&error];
+        if (content) {
+            NSArray *lines = [content componentsSeparatedByString:@"\n"];
+            for (NSString *line in lines) {
+                NSArray *parts = [line componentsSeparatedByString:@"="];
+                if ([parts count] == 2) {
+                    NSString *key = [[parts objectAtIndex:0] stringByTrimmingCharactersInSet:
+                                   [NSCharacterSet whitespaceCharacterSet]];
+                    NSString *value = [[parts objectAtIndex:1] stringByTrimmingCharactersInSet:
+                                     [NSCharacterSet whitespaceCharacterSet]];
+                    
+                    if ([key isEqualToString:@"APP_NAME"]) {
+                        [info setObject:value forKey:@"name"];
+                    } else if ([key isEqualToString:@"VERSION"]) {
+                        [info setObject:value forKey:@"version"];
+                    } else if ([key isEqualToString:@"EXECUTABLE_PATH"]) {
+                        [info setObject:value forKey:@"executable"];
+                    }
+                }
             }
+        }
+    } else if ([[NSFileManager defaultManager] fileExistsAtPath:makefilePath]) {
+        NSError *error;
+        NSString *content = [NSString stringWithContentsOfFile:makefilePath 
+                                                      encoding:NSUTF8StringEncoding 
+                                                         error:&error];
+        if (content) {
+            NSArray *lines = [content componentsSeparatedByString:@"\n"];
+            for (NSString *line in lines) {
+                NSRange appNameRange = [line rangeOfString:@"APP_NAME"];
+                if (appNameRange.location != NSNotFound) {
+                    NSArray *parts = [line componentsSeparatedByString:@"="];
+                    if ([parts count] >= 2) {
+                        NSString *value = [[parts objectAtIndex:1] stringByTrimmingCharactersInSet:
+                                         [NSCharacterSet whitespaceCharacterSet]];
+                        [info setObject:value forKey:@"name"];
+                    }
+                }
+            }
+        }
+    }
+    
+    NSString *appName = [info objectForKey:@"name"];
+    if (!appName) {
+        appName = [[appPath lastPathComponent] stringByDeletingPathExtension];
+        [info setObject:appName forKey:@"name"];
+    }
+    
+    if (![info objectForKey:@"version"]) {
+        [info setObject:@"Unknown" forKey:@"version"];
+    }
+    
+    [info setObject:appPath forKey:@"fullPath"];
+    
+    NSString *installedPath = [NSString stringWithFormat:@"/Applications/%@.app", appName];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:installedPath]) {
+        [info setObject:@"Installed" forKey:@"status"];
+    } else {
+        NSString *builtPath = [appPath stringByAppendingPathComponent:
+                             [NSString stringWithFormat:@"%@.app", appName]];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:builtPath]) {
+            [info setObject:@"Built" forKey:@"status"];
+        } else {
+            [info setObject:@"Not built" forKey:@"status"];
         }
     }
     
