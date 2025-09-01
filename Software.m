@@ -14,26 +14,13 @@
         isBuilding = NO;
         isInstalling = NO;
         
-        // Set the repo path - adjust this to your actual repo location
-        NSString *homeDir = NSHomeDirectory();
-        repoPath = [[homeDir stringByAppendingPathComponent:@"gershwin-universe-wrappers"] retain];
+        // Use NSSearchPathForDirectoriesInDomains to respect GNUstep.conf settings
+        // This will be ~/Library on Gershwin or ~/GNUstep/Library on traditional GNUstep
+        NSArray *libraryPaths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
+        NSString *userLibraryDir = [libraryPaths objectAtIndex:0];
         
-        // Check if repo exists, if not try /tmp or current directory
-        if (![[NSFileManager defaultManager] fileExistsAtPath:repoPath]) {
-            NSString *tmpPath = @"/tmp/gershwin-universe-wrappers";
-            if ([[NSFileManager defaultManager] fileExistsAtPath:tmpPath]) {
-                [repoPath release];
-                repoPath = [tmpPath retain];
-            } else {
-                // Try current directory
-                NSString *currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
-                NSString *currentRepoPath = [currentPath stringByAppendingPathComponent:@"gershwin-universe-wrappers"];
-                if ([[NSFileManager defaultManager] fileExistsAtPath:currentRepoPath]) {
-                    [repoPath release];
-                    repoPath = [currentRepoPath retain];
-                }
-            }
-        }
+        // Set the repo path in user Library directory ONLY (no fallbacks)
+        repoPath = [[userLibraryDir stringByAppendingPathComponent:@"gershwin-universe-wrappers"] retain];
     }
     return self;
 }
@@ -159,7 +146,16 @@
     [installButton setEnabled:NO];
     [upperView addSubview:installButton];
     
-    refreshButton = [[NSButton alloc] initWithFrame:NSMakeRect(230, 10, 100, 30)];
+    removeButton = [[NSButton alloc] initWithFrame:NSMakeRect(230, 10, 100, 30)];
+    [removeButton setTitle:@"Remove"];
+    [removeButton setButtonType:NSMomentaryPushInButton];
+    [removeButton setBezelStyle:NSRoundedBezelStyle];
+    [removeButton setTarget:self];
+    [removeButton setAction:@selector(removeApplication:)];
+    [removeButton setEnabled:NO];
+    [upperView addSubview:removeButton];
+    
+    refreshButton = [[NSButton alloc] initWithFrame:NSMakeRect(340, 10, 100, 30)];
     [refreshButton setTitle:@"Refresh"];
     [refreshButton setButtonType:NSMomentaryPushInButton];
     [refreshButton setBezelStyle:NSRoundedBezelStyle];
@@ -168,13 +164,13 @@
     [upperView addSubview:refreshButton];
     
     // Progress indicator
-    progressIndicator = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(340, 15, 20, 20)];
+    progressIndicator = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(450, 15, 20, 20)];
     [progressIndicator setStyle:NSProgressIndicatorSpinningStyle];
     [progressIndicator setDisplayedWhenStopped:NO];
     [upperView addSubview:progressIndicator];
     
     // Status label
-    statusLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(370, 10, 410, 30)];
+    statusLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(480, 10, 300, 30)];
     [statusLabel setEditable:NO];
     [statusLabel setBordered:NO];
     [statusLabel setBackgroundColor:[NSColor clearColor]];
@@ -201,7 +197,8 @@
     [logTextView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
     [logTextView setEditable:NO];
     [logTextView setRichText:YES];
-    [logTextView setFont:[NSFont fontWithName:@"Menlo" size:11]];
+    // Use monospace system font instead of hardcoded font
+    [logTextView setFont:[NSFont userFixedPitchFontOfSize:11.0]];
     [logTextView setBackgroundColor:[NSColor blackColor]];
     [logTextView setTextColor:[NSColor greenColor]];
     
@@ -234,10 +231,59 @@
 - (void)scanForApplications
 {
     if (![[NSFileManager defaultManager] fileExistsAtPath:repoPath]) {
-        [self appendToLog:[NSString stringWithFormat:@"Repository not found at: %@\n", repoPath] 
-                withColor:[NSColor redColor]];
-        [self updateStatus:@"Repository not found"];
-        return;
+        [self appendToLog:@"Repository not found locally. Attempting to clone...\n" 
+                withColor:[NSColor yellowColor]];
+        [self updateStatus:@"Cloning repository..."];
+        
+        // Try to clone the repository
+        NSString *parentDir = [repoPath stringByDeletingLastPathComponent];
+        
+        // Create parent directory if needed
+        [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
+                                  withIntermediateDirectories:YES
+                                                   attributes:nil
+                                                        error:nil];
+        
+        // Clone the repository
+        NSTask *gitTask = [[NSTask alloc] init];
+        [gitTask setLaunchPath:@"git"];
+        [gitTask setArguments:@[@"clone", 
+                               @"https://github.com/gershwin-desktop/gershwin-universe-wrappers.git",
+                               repoPath]];
+        [gitTask setCurrentDirectoryPath:parentDir];
+        
+        NSPipe *pipe = [NSPipe pipe];
+        [gitTask setStandardOutput:pipe];
+        [gitTask setStandardError:pipe];
+        
+        @try {
+            [gitTask launch];
+            [gitTask waitUntilExit];
+            
+            if ([gitTask terminationStatus] == 0) {
+                [self appendToLog:@"Repository cloned successfully!\n" 
+                        withColor:[NSColor greenColor]];
+                [self updateStatus:@"Repository ready"];
+            } else {
+                NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
+                NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+                [self appendToLog:[NSString stringWithFormat:@"Failed to clone repository:\n%@\n", output] 
+                        withColor:[NSColor redColor]];
+                [output release];
+                [self updateStatus:@"Failed to clone repository"];
+                [gitTask release];
+                return;
+            }
+        }
+        @catch (NSException *exception) {
+            [self appendToLog:[NSString stringWithFormat:@"Error cloning repository: %@\n", [exception reason]] 
+                    withColor:[NSColor redColor]];
+            [self updateStatus:@"Clone failed - is git installed?"];
+            [gitTask release];
+            return;
+        }
+        
+        [gitTask release];
     }
     
     NSArray *foundApps = [self findApplicationsInDirectory:repoPath];
@@ -395,6 +441,65 @@
     [self runCommand:@"/usr/local/bin/sudo" 
        withArguments:@[@"-S", @"/bin/sh", scriptPath] 
          inDirectory:appPath
+        requiresAuth:YES];
+}
+
+- (void)removeApplication:(id)sender
+{
+    if (selectedRow < 0 || selectedRow >= (NSInteger)[applications count]) {
+        return;
+    }
+    
+    NSDictionary *app = [applications objectAtIndex:selectedRow];
+    NSString *appName = [app objectForKey:@"name"];
+    NSString *status = [app objectForKey:@"status"];
+    
+    if (![status isEqualToString:@"Installed"]) {
+        NSAlert *alert = [[NSAlert alloc] init];
+        [alert setMessageText:@"Application Not Installed"];
+        [alert setInformativeText:@"This application is not currently installed."];
+        [alert addButtonWithTitle:@"OK"];
+        [alert runModal];
+        [alert release];
+        return;
+    }
+    
+    // Confirm removal
+    NSAlert *confirmAlert = [[NSAlert alloc] init];
+    [confirmAlert setMessageText:[NSString stringWithFormat:@"Remove %@?", appName]];
+    [confirmAlert setInformativeText:[NSString stringWithFormat:@"Are you sure you want to remove %@ from /Applications?", appName]];
+    [confirmAlert addButtonWithTitle:@"Remove"];
+    [confirmAlert addButtonWithTitle:@"Cancel"];
+    
+    if ([confirmAlert runModal] != NSAlertFirstButtonReturn) {
+        [confirmAlert release];
+        return;
+    }
+    [confirmAlert release];
+    
+    [self appendToLog:[NSString stringWithFormat:@"\n=== Removing %@ ===\n", appName]];
+    [self updateStatus:[NSString stringWithFormat:@"Removing %@...", appName]];
+    
+    isInstalling = YES;  // Reuse the flag for removal
+    [self setUIEnabled:NO];
+    
+    // Create removal script
+    NSString *scriptPath = @"/tmp/remove_app.sh";
+    NSString *scriptContent = [NSString stringWithFormat:
+        @"#!/bin/sh\n"
+        @"rm -rf '/Applications/%@.app'\n"
+        @"echo 'Removed %@.app from /Applications'\n", appName, appName];
+    
+    [scriptContent writeToFile:scriptPath 
+                     atomically:YES 
+                       encoding:NSUTF8StringEncoding 
+                          error:nil];
+    
+    chmod([scriptPath UTF8String], 0755);
+    
+    [self runCommand:@"/usr/local/bin/sudo" 
+       withArguments:@[@"-S", @"/bin/sh", scriptPath] 
+         inDirectory:NSHomeDirectory()
         requiresAuth:YES];
 }
 
@@ -570,26 +675,48 @@
             [app release];
             [applicationTableView reloadData];
         } else if (isInstalling) {
-            [self appendToLog:@"\nInstallation completed successfully!\n" withColor:[NSColor greenColor]];
-            [self updateStatus:@"Installation completed"];
-            
-            // Update application status
-            NSMutableDictionary *app = [[applications objectAtIndex:selectedRow] mutableCopy];
-            [app setObject:@"Installed" forKey:@"status"];
-            [applications replaceObjectAtIndex:selectedRow withObject:app];
-            [app release];
-            [applicationTableView reloadData];
-            
-            // Clean up temp script
-            [[NSFileManager defaultManager] removeItemAtPath:@"/tmp/install_app.sh" error:nil];
+            // Check if it was a removal or installation
+            if ([[NSFileManager defaultManager] fileExistsAtPath:@"/tmp/remove_app.sh"]) {
+                [self appendToLog:@"\nRemoval completed successfully!\n" withColor:[NSColor greenColor]];
+                [self updateStatus:@"Removal completed"];
+                
+                // Update application status
+                NSMutableDictionary *app = [[applications objectAtIndex:selectedRow] mutableCopy];
+                [app setObject:@"Not built" forKey:@"status"];
+                [applications replaceObjectAtIndex:selectedRow withObject:app];
+                [app release];
+                [applicationTableView reloadData];
+                
+                // Clean up temp script
+                [[NSFileManager defaultManager] removeItemAtPath:@"/tmp/remove_app.sh" error:nil];
+            } else {
+                [self appendToLog:@"\nInstallation completed successfully!\n" withColor:[NSColor greenColor]];
+                [self updateStatus:@"Installation completed"];
+                
+                // Update application status
+                NSMutableDictionary *app = [[applications objectAtIndex:selectedRow] mutableCopy];
+                [app setObject:@"Installed" forKey:@"status"];
+                [applications replaceObjectAtIndex:selectedRow withObject:app];
+                [app release];
+                [applicationTableView reloadData];
+                
+                // Clean up temp script
+                [[NSFileManager defaultManager] removeItemAtPath:@"/tmp/install_app.sh" error:nil];
+            }
         }
     } else {
         if (isBuilding) {
             [self appendToLog:@"\nBuild failed!\n" withColor:[NSColor redColor]];
             [self updateStatus:@"Build failed"];
         } else if (isInstalling) {
-            [self appendToLog:@"\nInstallation failed!\n" withColor:[NSColor redColor]];
-            [self updateStatus:@"Installation failed"];
+            // Check if it was a removal or installation
+            if ([[NSFileManager defaultManager] fileExistsAtPath:@"/tmp/remove_app.sh"]) {
+                [self appendToLog:@"\nRemoval failed!\n" withColor:[NSColor redColor]];
+                [self updateStatus:@"Removal failed"];
+            } else {
+                [self appendToLog:@"\nInstallation failed!\n" withColor:[NSColor redColor]];
+                [self updateStatus:@"Installation failed"];
+            }
         }
     }
     
@@ -615,7 +742,7 @@
                               value:color 
                               range:NSMakeRange(0, [text length])];
     [attributedString addAttribute:NSFontAttributeName 
-                              value:[NSFont fontWithName:@"Menlo" size:11] 
+                              value:[NSFont userFixedPitchFontOfSize:11.0] 
                               range:NSMakeRange(0, [text length])];
     
     [[logTextView textStorage] appendAttributedString:attributedString];
@@ -633,6 +760,7 @@
 {
     [buildButton setEnabled:enabled && (selectedRow >= 0)];
     [installButton setEnabled:enabled && (selectedRow >= 0)];
+    [removeButton setEnabled:enabled && (selectedRow >= 0)];
     [refreshButton setEnabled:enabled];
     [applicationTableView setEnabled:enabled];
     
@@ -652,6 +780,7 @@
     BOOL hasSelection = (selectedRow >= 0);
     [buildButton setEnabled:hasSelection && !isBuilding && !isInstalling];
     [installButton setEnabled:hasSelection && !isBuilding && !isInstalling];
+    [removeButton setEnabled:hasSelection && !isBuilding && !isInstalling];
     
     if (hasSelection) {
         NSDictionary *app = [applications objectAtIndex:selectedRow];

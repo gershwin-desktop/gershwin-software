@@ -8,6 +8,7 @@
     NSTextView *logTextView;
     NSButton *buildButton;
     NSButton *installButton;
+    NSButton *removeButton;
     NSButton *refreshButton;
     NSProgressIndicator *progressIndicator;
     NSTextField *statusLabel;
@@ -35,6 +36,7 @@
 
 - (void)buildApplication:(id)sender;
 - (void)installApplication:(id)sender;
+- (void)removeApplication:(id)sender;
 - (void)refreshList:(id)sender;
 
 - (void)runCommand:(NSString *)command 
