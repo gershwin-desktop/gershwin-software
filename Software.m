@@ -14,11 +14,9 @@
         isBuilding = NO;
         isInstalling = NO;
         
-        // Use NSSearchPathForDirectoriesInDomains to respect GNUstep.conf settings
         NSArray *libraryPaths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
         NSString *userLibraryDir = [libraryPaths objectAtIndex:0];
         
-        // Set the repo path in user Library directory
         repoPath = [[userLibraryDir stringByAppendingPathComponent:@"gershwin-universe-wrappers"] retain];
     }
     return self;
@@ -49,6 +47,7 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+    [self setupMenu];
     [mainWindow makeKeyAndOrderFront:nil];
     [self refreshApplicationList];
 }
@@ -58,9 +57,174 @@
     return YES;
 }
 
+- (void)setupMenu
+{
+    NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@"MainMenu"];
+    NSMenuItem *menuItem;
+    NSMenu *submenu;
+    
+    menuItem = [[NSMenuItem alloc] initWithTitle:@"Software"
+                                           action:NULL
+                                    keyEquivalent:@""];
+    submenu = [[NSMenu alloc] initWithTitle:@"Software"];
+    
+    [submenu addItemWithTitle:@"About Software Manager"
+                       action:@selector(showAbout:)
+                keyEquivalent:@""];
+    
+    NSMenuItem *servicesItem = [[NSMenuItem alloc] initWithTitle:@"Services"
+                                                           action:NULL
+                                                    keyEquivalent:@""];
+    NSMenu *servicesMenu = [[NSMenu alloc] initWithTitle:@"Services"];
+    [servicesItem setSubmenu:servicesMenu];
+    [submenu addItem:servicesItem];
+    [NSApp setServicesMenu:servicesMenu];
+    [servicesMenu release];
+    [servicesItem release];
+    
+    [submenu addItemWithTitle:@"Hide Software Manager"
+                       action:@selector(hide:)
+                keyEquivalent:@"h"];
+    
+    NSMenuItem *hideOthersItem = (NSMenuItem *)[submenu addItemWithTitle:@"Hide Others"
+                                                                   action:@selector(hideOtherApplications:)
+                                                            keyEquivalent:@"h"];
+    [hideOthersItem setKeyEquivalentModifierMask:(NSCommandKeyMask | NSAlternateKeyMask)];
+    
+    [submenu addItemWithTitle:@"Show All"
+                       action:@selector(unhideAllApplications:)
+                keyEquivalent:@""];
+    
+    [submenu addItemWithTitle:@"Quit Software Manager"
+                       action:@selector(terminate:)
+                keyEquivalent:@"q"];
+    
+    [menuItem setSubmenu:submenu];
+    [mainMenu addItem:menuItem];
+    [submenu release];
+    [menuItem release];
+    
+    menuItem = [[NSMenuItem alloc] initWithTitle:@"File"
+                                           action:NULL
+                                    keyEquivalent:@""];
+    submenu = [[NSMenu alloc] initWithTitle:@"File"];
+    
+    [submenu addItemWithTitle:@"Refresh Applications"
+                       action:@selector(refreshList:)
+                keyEquivalent:@"r"];
+    
+    [submenu addItemWithTitle:@"Update Repository"
+                       action:@selector(updateRepository:)
+                keyEquivalent:@"u"];
+    
+    [submenu addItemWithTitle:@"Close Window"
+                       action:@selector(performClose:)
+                keyEquivalent:@"w"];
+    
+    [menuItem setSubmenu:submenu];
+    [mainMenu addItem:menuItem];
+    [submenu release];
+    [menuItem release];
+    
+    menuItem = [[NSMenuItem alloc] initWithTitle:@"Edit"
+                                           action:NULL
+                                    keyEquivalent:@""];
+    submenu = [[NSMenu alloc] initWithTitle:@"Edit"];
+    
+    [submenu addItemWithTitle:@"Copy"
+                       action:@selector(copy:)
+                keyEquivalent:@"c"];
+    
+    [submenu addItemWithTitle:@"Select All"
+                       action:@selector(selectAll:)
+                keyEquivalent:@"a"];
+    
+    [submenu addItemWithTitle:@"Clear Log"
+                       action:@selector(clearLog:)
+                keyEquivalent:@"k"];
+    
+    [menuItem setSubmenu:submenu];
+    [mainMenu addItem:menuItem];
+    [submenu release];
+    [menuItem release];
+    
+    menuItem = [[NSMenuItem alloc] initWithTitle:@"Window"
+                                           action:NULL
+                                    keyEquivalent:@""];
+    submenu = [[NSMenu alloc] initWithTitle:@"Window"];
+    [NSApp setWindowsMenu:submenu];
+    
+    [submenu addItemWithTitle:@"Minimize"
+                       action:@selector(performMiniaturize:)
+                keyEquivalent:@"m"];
+    
+    [submenu addItemWithTitle:@"Zoom"
+                       action:@selector(performZoom:)
+                keyEquivalent:@""];
+    
+    [submenu addItemWithTitle:@"Bring All to Front"
+                       action:@selector(arrangeInFront:)
+                keyEquivalent:@""];
+    
+    [menuItem setSubmenu:submenu];
+    [mainMenu addItem:menuItem];
+    [submenu release];
+    [menuItem release];
+    
+    [NSApp setMainMenu:mainMenu];
+    [mainMenu release];
+}
+
+- (void)showAbout:(id)sender
+{
+    NSMutableDictionary *options = [NSMutableDictionary dictionary];
+    [options setObject:@"Gershwin Software Manager" forKey:@"ApplicationName"];
+    [options setObject:@"Version 1.0.0" forKey:@"ApplicationVersion"];
+    [options setObject:@"Copyright © 2025 Joe Maloney" forKey:@"Copyright"];
+    [options setObject:@"A package manager for Gershwin applications" forKey:@"ApplicationDescription"];
+    
+    NSString *iconPath = [[NSBundle mainBundle] pathForResource:@"Software" ofType:@"png"];
+    if (iconPath && [[NSFileManager defaultManager] fileExistsAtPath:iconPath]) {
+        NSImage *icon = [[NSImage alloc] initWithContentsOfFile:iconPath];
+        if (icon) {
+            [options setObject:icon forKey:@"ApplicationIcon"];
+            [icon release];
+        }
+    }
+    
+    [NSApp orderFrontStandardAboutPanelWithOptions:options];
+}
+
+- (void)showPreferences:(id)sender
+{
+    [self appendToLog:@"Preferences window not yet implemented.\n" withColor:[NSColor yellowColor]];
+}
+
+- (void)updateRepository:(id)sender
+{
+    if (![[NSFileManager defaultManager] fileExistsAtPath:repoPath]) {
+        [self appendToLog:@"Repository not found. Please refresh the application list first.\n" 
+                withColor:[NSColor redColor]];
+        return;
+    }
+    
+    [self appendToLog:@"\n=== Updating Repository ===\n"];
+    [self updateStatus:@"Updating repository..."];
+    [self setUIEnabled:NO];
+    
+    [self runCommand:@"git"
+       withArguments:@[@"pull", @"origin", @"main"]
+         inDirectory:repoPath
+        requiresAuth:NO];
+}
+
+- (void)clearLog:(id)sender
+{
+    [logTextView setString:@""];
+}
+
 - (void)setupUI
 {
-    // Create main window
     mainWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 800, 600)
                                               styleMask:(NSWindowStyleMaskTitled | 
                                                         NSWindowStyleMaskClosable | 
@@ -73,28 +237,23 @@
     
     NSView *contentView = [mainWindow contentView];
     
-    // Create split view
     NSSplitView *splitView = [[NSSplitView alloc] initWithFrame:[contentView bounds]];
     [splitView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
     [splitView setDividerStyle:NSSplitViewDividerStyleThin];
     [splitView setVertical:NO];
     
-    // Upper view for application list
     NSView *upperView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 800, 300)];
     
-    // Create scroll view for table
     NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(10, 50, 780, 240)];
     [scrollView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
     [scrollView setHasVerticalScroller:YES];
     [scrollView setBorderType:NSBezelBorder];
     
-    // Create table view
     applicationTableView = [[NSTableView alloc] initWithFrame:[[scrollView contentView] bounds]];
     [applicationTableView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
     [applicationTableView setUsesAlternatingRowBackgroundColors:YES];
     [applicationTableView setRowHeight:24];
     
-    // Add columns
     NSTableColumn *nameColumn = [[NSTableColumn alloc] initWithIdentifier:@"name"];
     [[nameColumn headerCell] setStringValue:@"Application"];
     [nameColumn setWidth:200];
@@ -126,7 +285,6 @@
     [upperView addSubview:scrollView];
     [scrollView release];
     
-    // Create buttons
     buildButton = [[NSButton alloc] initWithFrame:NSMakeRect(10, 10, 100, 30)];
     [buildButton setTitle:@"Build"];
     [buildButton setButtonType:NSMomentaryPushInButton];
@@ -162,13 +320,11 @@
     [refreshButton setAction:@selector(refreshList:)];
     [upperView addSubview:refreshButton];
     
-    // Progress indicator
     progressIndicator = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(450, 15, 20, 20)];
     [progressIndicator setStyle:NSProgressIndicatorSpinningStyle];
     [progressIndicator setDisplayedWhenStopped:NO];
     [upperView addSubview:progressIndicator];
     
-    // Status label
     statusLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(480, 10, 300, 30)];
     [statusLabel setEditable:NO];
     [statusLabel setBordered:NO];
@@ -176,7 +332,6 @@
     [statusLabel setStringValue:@"Ready"];
     [upperView addSubview:statusLabel];
     
-    // Lower view for log output
     NSView *lowerView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 800, 280)];
     
     NSTextField *logLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(10, 250, 100, 20)];
@@ -345,11 +500,8 @@
         }
     }
     
-    // Store the full path for internal use (building, installing, etc.)
     [info setObject:appPath forKey:@"fullPath"];
     
-    // Extract the repository name from the path
-    // The repo is the parent directory of the application folder
     NSString *parentPath = [appPath stringByDeletingLastPathComponent];
     NSString *repoName = [parentPath lastPathComponent];
     [info setObject:repoName forKey:@"path"];
@@ -380,7 +532,7 @@
     }
     
     NSDictionary *app = [applications objectAtIndex:selectedRow];
-    NSString *appPath = [app objectForKey:@"fullPath"];  // Changed from "path" to "fullPath"
+    NSString *appPath = [app objectForKey:@"fullPath"];
     NSString *appName = [app objectForKey:@"name"];
     
     [self appendToLog:[NSString stringWithFormat:@"\n=== Building %@ ===\n", appName]];
@@ -402,12 +554,11 @@
     }
     
     NSDictionary *app = [applications objectAtIndex:selectedRow];
-    NSString *appPath = [app objectForKey:@"fullPath"];  // Changed from "path" to "fullPath"
+    NSString *appPath = [app objectForKey:@"fullPath"];
     NSString *appName = [app objectForKey:@"name"];
     NSString *status = [app objectForKey:@"status"];
     
     if (![status isEqualToString:@"Built"] && ![status isEqualToString:@"Installed"]) {
-        // Just log the error, no dialog
         [self appendToLog:@"Error: Application must be built before installing.\n" withColor:[NSColor redColor]];
         [self updateStatus:@"Build required first"];
         return;
@@ -434,7 +585,6 @@
     
     NSString *gsauthPath = [self findGSAuthPath];
     if (!gsauthPath) {
-        // Just log the error, no dialog
         [self appendToLog:@"ERROR: gsauth not found!\n" withColor:[NSColor redColor]];
         [self appendToLog:@"Please install gsauth to perform administrative operations.\n" withColor:[NSColor redColor]];
         [self updateStatus:@"gsauth not found"];
@@ -462,7 +612,6 @@
     NSString *status = [app objectForKey:@"status"];
     
     if (![status isEqualToString:@"Installed"]) {
-        // Just log the error, no dialog
         [self appendToLog:@"Error: Application is not installed.\n" withColor:[NSColor redColor]];
         [self updateStatus:@"Not installed"];
         return;
@@ -489,7 +638,6 @@
     
     NSString *gsauthPath = [self findGSAuthPath];
     if (!gsauthPath) {
-        // Just log the error, no dialog
         [self appendToLog:@"ERROR: gsauth not found!\n" withColor:[NSColor redColor]];
         [self appendToLog:@"Please install gsauth to perform administrative operations.\n" withColor:[NSColor redColor]];
         [self updateStatus:@"gsauth not found"];
@@ -498,8 +646,6 @@
         return;
     }
     
-    // Note: The gsauth dialog will serve as confirmation
-    // The action text "remove AppName" makes it clear what will happen
     [self runCommand:gsauthPath
        withArguments:@[@"--exec", @"/bin/sh", scriptPath,
                       @"Software Manager",
@@ -632,7 +778,18 @@
                                                     name:NSTaskDidTerminateNotification 
                                                   object:task];
     
-    if (status == 0) {
+    NSArray *args = [task arguments];
+    if ([args count] > 0 && [[args objectAtIndex:0] isEqualToString:@"pull"]) {
+        if (status == 0) {
+            [self appendToLog:@"\nRepository updated successfully!\n" withColor:[NSColor greenColor]];
+            [self updateStatus:@"Repository updated"];
+            [self refreshApplicationList];
+        } else {
+            [self appendToLog:@"\nRepository update failed!\n" withColor:[NSColor redColor]];
+            [self updateStatus:@"Update failed"];
+        }
+        [self setUIEnabled:YES];
+    } else if (status == 0) {
         if (isBuilding) {
             [self appendToLog:@"\nBuild completed successfully!\n" withColor:[NSColor greenColor]];
             [self updateStatus:@"Build completed"];
