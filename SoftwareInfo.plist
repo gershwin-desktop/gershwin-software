@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//GNUstep//DTD plist 0.9//EN" "http://www.gnustep.org/plist-0_9.dtd">
+<plist version="0.9">
+<dict>
+    <key>ApplicationName</key>
+    <string>Software</string>
+    
+    <key>ApplicationDescription</key>
+    <string>A package manager for Gershwin applications</string>
+    
+    <key>ApplicationVersion</key>
+    <string>20250831</string>
+    
+    <key>Authors</key>
+    <array>
+        <string>Joseph Maloney</string>
+    </array>
+    
+    <key>Copyright</key>
+    <string>Copyright © 2025 Joseph Maloney</string>
+    
+    <key>NSExecutable</key>
+    <string>Software</string>
+    
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    
+    <key>CFBundleIconFile</key>
+    <string>Software.png</string>
+    
+    <key>CFBundleIdentifier</key>
+    <string>org.gershwin.software-manager</string>
+</dict>
+</plist>

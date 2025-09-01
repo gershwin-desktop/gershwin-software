@@ -177,11 +177,8 @@
 
 - (void)showAbout:(id)sender
 {
-    NSMutableDictionary *options = [NSMutableDictionary dictionary];
-    [options setObject:@"Gershwin Software Manager" forKey:@"ApplicationName"];
-    [options setObject:@"Version 1.0.0" forKey:@"ApplicationVersion"];
-    [options setObject:@"Copyright © 2025 Joe Maloney" forKey:@"Copyright"];
-    [options setObject:@"A package manager for Gershwin applications" forKey:@"ApplicationDescription"];
+    NSDictionary *infoDict = [[NSBundle mainBundle] infoDictionary];
+    NSMutableDictionary *options = [NSMutableDictionary dictionaryWithDictionary:infoDict];
     
     NSString *iconPath = [[NSBundle mainBundle] pathForResource:@"Software" ofType:@"png"];
     if (iconPath && [[NSFileManager defaultManager] fileExistsAtPath:iconPath]) {
